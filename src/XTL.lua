@@ -1,6 +1,7 @@
 -- Options:
 local msg_erro = true
 local no_translation = ':('
+local default_language = 'EN'
 local project_name = '001'
 local hash_XTL = 'XTL'
 
@@ -12,7 +13,7 @@ see https://github.com/LuaAdvanced/XTLanguage/blob/master/LICENSE
 ]==]--
 
 local XTL = {
-	version = '0.0.alpha01',
+	version = '0.0.alpha02',
 	name = 'XTLanguage',
 	author = 'Tiago Danin - 2016',
 	license = 'GPL v2',
@@ -31,7 +32,7 @@ end
 
 local hash_base = hash_XTL .. ':' .. project_name .. ':'
 
-function XTL.user (id, set)
+function XTL.user (id, set, force)
 	local hash = hash_base .. 'ID:' .. id
 	if set == 'del' then
 		redis:del(hash)
@@ -39,12 +40,12 @@ function XTL.user (id, set)
 	elseif set then
 		redis:set(hash, set)
 		return set, true
+	elseif redis:get(hash) then
+		return redis:get(hash), true
+	elseif force then
+		return default_language, true
 	else
-		if redis:get(hash) then
-			return redis:get(hash), true
-		else
-			return no_translation, false
-		end
+		return false, false
 	end
 end
 
@@ -60,8 +61,14 @@ function XTL.get (lang, input)
 		local get = redis:get(hash)
 		return get, true
 	else
-		return no, false
+		return no_translation, false
 	end
+end
+
+function XTL.shor (id, input)
+	local lang = XTL.user(id, false, true)
+	local res = XTL.get(lang, input)
+	return res
 end
 
 function XTL.vote (lang, input, set, id)
@@ -71,11 +78,11 @@ function XTL.vote (lang, input, set, id)
 		redis:set(hash .. ':' .. set, ':ID:' .. id)
 		redis:incr(hash .. ':' .. set)
 		redis:hset(hash .. ':' .. set)
+	elseif not redis:get(hash .. ':' .. set .. ':ID:' .. id) then
+		redis:set(hash .. ':' .. set .. ':ID:' .. id, 'OK')
+		redis:incr(hash .. ':' .. set)
 	else
-		if not redis:get(hash .. ':' .. set .. ':ID:' .. id) then
-			redis:set(hash .. ':' .. set .. ':ID:' .. id, 'OK')
-			redis:incr(hash .. ':' .. set)
-		end
+		return 'ERRO!', false
 	end
 end
 
