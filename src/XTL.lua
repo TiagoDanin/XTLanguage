@@ -1,6 +1,7 @@
 -- Options:
 local msg_erro = true
-local no_translation = ':('
+local no_translation = true
+local msg_noTranslation = ':('
 local default_language = 'EN'
 local project_name = '001'
 local hash_XTL = 'XTL'
@@ -13,7 +14,7 @@ see https://github.com/LuaAdvanced/XTLanguage/blob/master/LICENSE
 ]==]--
 
 local XTL = {
-	version = '0.0.alpha02',
+	version = '0.0.alpha03',
 	name = 'XTLanguage',
 	author = 'Tiago Danin - 2016',
 	license = 'GPL v2',
@@ -23,9 +24,11 @@ local XTL = {
 function XTL.load_redis(redis)
 	redis = redis
 	if redis:ping() then
-		return true, true
+		return true
+
 	else
-		return false, false
+		return false
+
 	end
 	return
 end
@@ -36,32 +39,41 @@ function XTL.user (id, set, force)
 	local hash = hash_base .. 'ID:' .. id
 	if set == 'del' then
 		redis:del(hash)
-		return hash, true
+		return hash
+
 	elseif set then
 		redis:set(hash, set)
-		return set, true
+		return set
+
 	elseif redis:get(hash) then
-		return redis:get(hash), true
+		return redis:get(hash)
+
 	elseif force then
-		return default_language, true
+		return default_language
+
 	else
-		return false, false
+		return false
 	end
 end
 
 function XTL.set (lang, input, set)
-	local hash = hash_base .. 'LANG:' .. lang .. ':IN:' .. input
+	local hash = hash_base .. 'LANG:' .. lang .. ':' .. input
 	redis:set(hash, set)
-	return set, true
+	return set
 end
 
 function XTL.get (lang, input)
-	local hash = hash_base .. 'LANG:' .. lang .. ':IN:' .. input
+	local hash = hash_base .. 'LANG:' .. lang .. ':' .. input
 	if redis:get(hash) then
 		local get = redis:get(hash)
-		return get, true
+		return get
+
+	elseif no_translation then
+		return msg_noTranslation
+
 	else
-		return no_translation, false
+		return false
+
 	end
 end
 
@@ -71,19 +83,66 @@ function XTL.shor (id, input)
 	return res
 end
 
-function XTL.vote (lang, input, set, id)
-	local hash = hash_base .. 'VOTE:' .. input
-	if not redis:get(hash .. ':' .. set) then
-		redis:set(hash .. ':' .. set .. ':ID:' .. id, 'OK')
-		redis:set(hash .. ':' .. set, ':ID:' .. id)
-		redis:incr(hash .. ':' .. set)
-		redis:hset(hash .. ':' .. set)
-	elseif not redis:get(hash .. ':' .. set .. ':ID:' .. id) then
-		redis:set(hash .. ':' .. set .. ':ID:' .. id, 'OK')
-		redis:incr(hash .. ':' .. set)
+function XTL.vote (lang, input, set, id, force, pont)
+	local hash = hash_base .. 'VOTE:' .. lang .. ':' .. input
+	if not redis:get(hash .. 'USER: ' .. id) or force then
+		if pont then
+			redis:incrby(hash .. ':' .. set .. 'VOTE', pont)
+			redis:set(hash .. 'USER: ' .. id .. ':PONT', pont)
+		else
+			redis:incr(hash .. ':' .. set .. 'VOTE')
+		end
+
+		local n = redis:get(hash .. ':' .. set .. 'VOTE')
+		redis:hset(hash .. ':LIST', set, n)
+		redis:set(hash .. 'USER: ' .. id, set)
+		return set
+
+	elseif redis:get(hash .. 'USER: ' .. id) then
+		local ex_set = redis:get(hash .. 'USER: ' .. id)
+		if redis:get(hash .. 'USER: ' .. id .. ':PONT') then
+			redis:decrby(hash .. ':' .. ex_set .. 'VOTE', redis:get(hash .. 'USER: ' .. id .. ':PONT'))
+			redis:set(hash .. 'USER: ' .. id .. ':PONT', 1)
+		else
+			redis:decr(hash .. ':' .. ex_set .. 'VOTE')
+		end
+
+		if pont then
+			redis:incrby(hash .. ':' .. set .. 'VOTE', pont)
+			redis:set(hash .. 'USER: ' .. id .. ':PONT', pont)
+		else
+			redis:incr(hash .. ':' .. set .. 'VOTE')
+		end
+
+		local n = redis:get(hash .. ':' .. set .. 'VOTE')
+		redis:hset(hash .. ':LIST', set, n)
+		redis:set(hash .. 'USER: ' .. id, set)
+		return set
+
 	else
-		return 'ERRO!', false
+		return false
+
 	end
+end
+
+function XTL.listvote (lang, input)
+	local hash = hash_base .. 'VOTE:' .. lang .. ':' .. input
+	local table = redis:hgetall(hash .. ':LIST')
+	return table
+end
+
+function XTL.sync (lang, input)
+	local set = msg_noTranslation
+	local check = 0
+	for v,i in pairs(XTL.listvote(lang, input)) do
+		i = math.floor(i)
+		if check < i then
+			check = i
+			set = v
+		end
+	end
+	XTL.set(lang, input, set)
+	return set
 end
 
 return XTL
