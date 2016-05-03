@@ -1,2 +1,4 @@
 redis.lua
 dump.rdb
+log.txt
+db.rdb
