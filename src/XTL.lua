@@ -9,7 +9,7 @@ local hash_XTL = 'XTL'
 By 2016 Tiago Danin
 GNU GENERAL PUBLIC LICENSE
 Version 2, June 1991
-see https://github.com/LuaAdvanced/XTLanguage/blob/master/LICENSE
+see https://github.com/TiagoDanin/XTLanguage/blob/master/LICENSE
 ]==]--
 
 local XTL = {
